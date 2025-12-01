@@ -1,11 +1,18 @@
 package app;
 
-import javax.sound.sampled.*;
-import java.util.*;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.Mixer;
+import javax.sound.sampled.SourceDataLine;
+import javax.sound.sampled.TargetDataLine;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 
 public class AudioRouter {
 
-    public static void main(String[] args) throws Exception {
+    static void main() throws Exception {
 
         AudioFormat format = new AudioFormat(44100, 16, 2, true, false);
 
@@ -27,7 +34,7 @@ public class AudioRouter {
                 outputs.add(info);
             }
         }
-        
+
         // List
         System.out.println("=== INPUT DEVICES ===");
         for (int i = 0; i < inputs.size(); i++)

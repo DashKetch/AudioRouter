@@ -12,20 +12,11 @@ import java.util.Scanner;
 
 public class AudioRouter {
 
-    static void main() throws Exception {
+     static void main() throws Exception {
 
-        // Stable, low-latency friendly format
-        AudioFormat format = new AudioFormat(
-                AudioFormat.Encoding.PCM_SIGNED,
-                44100f,
-                16,
-                2,
-                4,      // frame size
-                44100f, // frame rate
-                false   // little endian
-        );
+        AudioFormat format = new AudioFormat(44100, 16, 2, true, false);
 
-        // ===== Detect devices =====
+        // --- List devices ---
         Mixer.Info[] mixers = AudioSystem.getMixerInfo();
         List<Mixer.Info> inputs = new ArrayList<>();
         List<Mixer.Info> outputs = new ArrayList<>();
@@ -33,64 +24,47 @@ public class AudioRouter {
         for (Mixer.Info info : mixers) {
             Mixer mixer = AudioSystem.getMixer(info);
 
-            if (mixer.isLineSupported(new DataLine.Info(TargetDataLine.class, format))) {
+            if (mixer.getTargetLineInfo().length > 0)
                 inputs.add(info);
-            }
 
-            if (mixer.isLineSupported(new DataLine.Info(SourceDataLine.class, format))) {
+            if (mixer.getSourceLineInfo().length > 0)
                 outputs.add(info);
-            }
         }
 
-        // ===== List devices =====
-        System.out.println("=== INPUT DEVICES ===");
+        // Print devices
+        System.out.println("Inputs:");
         for (int i = 0; i < inputs.size(); i++)
             System.out.println(i + ": " + inputs.get(i).getName());
 
-        System.out.println("\n=== OUTPUT DEVICES ===");
+        System.out.println("\nOutputs:");
         for (int i = 0; i < outputs.size(); i++)
             System.out.println(i + ": " + outputs.get(i).getName());
 
-        // ===== User chooses =====
+        // Ask user
         Scanner sc = new Scanner(System.in);
-
         System.out.print("\nPick input index: ");
-        Mixer.Info inputChoice = inputs.get(sc.nextInt());
-
+        Mixer.Info inInfo = inputs.get(sc.nextInt());
         System.out.print("Pick output index: ");
-        Mixer.Info outputChoice = outputs.get(sc.nextInt());
+        Mixer.Info outInfo = outputs.get(sc.nextInt());
 
-        // ===== Open lines with explicit low-latency buffer =====
-
-        // Try a small buffer — you can tune this (128, 256, 512)
-        int bufferSize = 256;
-
-        DataLine.Info inputInfo = new DataLine.Info(TargetDataLine.class, format, bufferSize);
-        DataLine.Info outputInfo = new DataLine.Info(SourceDataLine.class, format, bufferSize);
-
+        // Open lines
         TargetDataLine inputLine = (TargetDataLine)
-                AudioSystem.getMixer(inputChoice).getLine(inputInfo);
-        inputLine.open(format, bufferSize);
+                AudioSystem.getMixer(inInfo).getLine(new DataLine.Info(TargetDataLine.class, format));
+        inputLine.open(format);
         inputLine.start();
 
         SourceDataLine outputLine = (SourceDataLine)
-                AudioSystem.getMixer(outputChoice).getLine(outputInfo);
-        outputLine.open(format, bufferSize);
+                AudioSystem.getMixer(outInfo).getLine(new DataLine.Info(SourceDataLine.class, format));
+        outputLine.open(format);
         outputLine.start();
 
-        // Flush initial buffers (reduces startup click + delay)
-        outputLine.flush();
+        System.out.println("Routing audio... Ctrl+C to stop.");
 
-        System.out.println("\nRouting audio with low-latency... Press Ctrl+C to stop.");
-
-        // ===== Tight low-latency audio loop =====
-        byte[] buffer = new byte[bufferSize];
-
+        // Copy audio
+        byte[] buffer = new byte[4096];
         while (true) {
-            int bytesRead = inputLine.read(buffer, 0, buffer.length);
-            if (bytesRead > 0) {
-                outputLine.write(buffer, 0, bytesRead);
-            }
+            int bytes = inputLine.read(buffer, 0, buffer.length);
+            if (bytes > 0) outputLine.write(buffer, 0, bytes);
         }
     }
 }

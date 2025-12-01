@@ -14,9 +14,18 @@ public class AudioRouter {
 
     static void main() throws Exception {
 
-        AudioFormat format = new AudioFormat(44100, 16, 2, true, false);
+        // Stable, low-latency friendly format
+        AudioFormat format = new AudioFormat(
+                AudioFormat.Encoding.PCM_SIGNED,
+                44100f,
+                16,
+                2,
+                4,      // frame size
+                44100f, // frame rate
+                false   // little endian
+        );
 
-        // Detect devices
+        // ===== Detect devices =====
         Mixer.Info[] mixers = AudioSystem.getMixerInfo();
         List<Mixer.Info> inputs = new ArrayList<>();
         List<Mixer.Info> outputs = new ArrayList<>();
@@ -24,18 +33,16 @@ public class AudioRouter {
         for (Mixer.Info info : mixers) {
             Mixer mixer = AudioSystem.getMixer(info);
 
-            // Check if mixer supports an actual audio input line
-            if (mixer.isLineSupported(new DataLine.Info(TargetDataLine.class, null))) {
+            if (mixer.isLineSupported(new DataLine.Info(TargetDataLine.class, format))) {
                 inputs.add(info);
             }
 
-            // Check if mixer supports an actual audio output line
-            if (mixer.isLineSupported(new DataLine.Info(SourceDataLine.class, null))) {
+            if (mixer.isLineSupported(new DataLine.Info(SourceDataLine.class, format))) {
                 outputs.add(info);
             }
         }
 
-        // List
+        // ===== List devices =====
         System.out.println("=== INPUT DEVICES ===");
         for (int i = 0; i < inputs.size(); i++)
             System.out.println(i + ": " + inputs.get(i).getName());
@@ -44,6 +51,7 @@ public class AudioRouter {
         for (int i = 0; i < outputs.size(); i++)
             System.out.println(i + ": " + outputs.get(i).getName());
 
+        // ===== User chooses =====
         Scanner sc = new Scanner(System.in);
 
         System.out.print("\nPick input index: ");
@@ -52,27 +60,37 @@ public class AudioRouter {
         System.out.print("Pick output index: ");
         Mixer.Info outputChoice = outputs.get(sc.nextInt());
 
-        // Open lines
+        // ===== Open lines with explicit low-latency buffer =====
+
+        // Try a small buffer — you can tune this (128, 256, 512)
+        int bufferSize = 256;
+
+        DataLine.Info inputInfo = new DataLine.Info(TargetDataLine.class, format, bufferSize);
+        DataLine.Info outputInfo = new DataLine.Info(SourceDataLine.class, format, bufferSize);
+
         TargetDataLine inputLine = (TargetDataLine)
-                AudioSystem.getMixer(inputChoice)
-                        .getLine(new DataLine.Info(TargetDataLine.class, format));
-        inputLine.open(format);
+                AudioSystem.getMixer(inputChoice).getLine(inputInfo);
+        inputLine.open(format, bufferSize);
         inputLine.start();
 
         SourceDataLine outputLine = (SourceDataLine)
-                AudioSystem.getMixer(outputChoice)
-                        .getLine(new DataLine.Info(SourceDataLine.class, format));
-        outputLine.open(format);
+                AudioSystem.getMixer(outputChoice).getLine(outputInfo);
+        outputLine.open(format, bufferSize);
         outputLine.start();
 
-        System.out.println("\nRouting audio... Press Ctrl+C to stop.");
+        // Flush initial buffers (reduces startup click + delay)
+        outputLine.flush();
 
-        // Pass-through loop
-        byte[] buffer = new byte[4096];
+        System.out.println("\nRouting audio with low-latency... Press Ctrl+C to stop.");
+
+        // ===== Tight low-latency audio loop =====
+        byte[] buffer = new byte[bufferSize];
+
         while (true) {
             int bytesRead = inputLine.read(buffer, 0, buffer.length);
-            if (bytesRead > 0)
+            if (bytesRead > 0) {
                 outputLine.write(buffer, 0, bytesRead);
+            }
         }
     }
 }

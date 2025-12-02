@@ -14,24 +14,30 @@ public class AudioRouter {
 
      static void main() throws Exception {
 
-        AudioFormat format = new AudioFormat(44100, 16, 2, true, false);
+         AudioFormat format = new AudioFormat(44100, 16, 2, true, false);
 
-        // --- List devices ---
-        Mixer.Info[] mixers = AudioSystem.getMixerInfo();
-        List<Mixer.Info> inputs = new ArrayList<>();
-        List<Mixer.Info> outputs = new ArrayList<>();
+         Mixer.Info[] mixers = AudioSystem.getMixerInfo();
+         List<Mixer.Info> inputs = new ArrayList<>();
+         List<Mixer.Info> outputs = new ArrayList<>();
 
-        for (Mixer.Info info : mixers) {
-            Mixer mixer = AudioSystem.getMixer(info);
+         for (Mixer.Info info : mixers) {
+             Mixer mixer = AudioSystem.getMixer(info);
 
-            if (mixer.getTargetLineInfo().length > 0)
-                inputs.add(info);
+             // Check input capability
+             DataLine.Info inputInfo = new DataLine.Info(TargetDataLine.class, format);
+             if (mixer.isLineSupported(inputInfo)) {
+                 inputs.add(info);
+             }
 
-            if (mixer.getSourceLineInfo().length > 0)
-                outputs.add(info);
-        }
+             // Check output capability
+             DataLine.Info outputInfo = new DataLine.Info(SourceDataLine.class, format);
+             if (mixer.isLineSupported(outputInfo)) {
+                 outputs.add(info);
+             }
+         }
 
-        // Print devices
+
+         // Print devices
         System.out.println("Inputs:");
         for (int i = 0; i < inputs.size(); i++)
             System.out.println(i + ": " + inputs.get(i).getName());
